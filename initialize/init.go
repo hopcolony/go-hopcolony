@@ -91,8 +91,17 @@ func newProject(config ProjectConfig) (*Project, error) {
 	}
 }
 
-var project *Project
+var P *Project
 
-func Initialize(config ProjectConfig) (*Project, error) {
-	return newProject(config)
+func Initialize(config ProjectConfig) (Project, error) {
+	var err error
+	P, err = newProject(config)
+	if err != nil {
+		return Project{}, err
+	}
+	return *P, nil
+}
+
+func GetProject() Project {
+	return *P
 }

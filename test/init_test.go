@@ -1,11 +1,12 @@
 package test
 
 import (
-	"hopcolony.io/hopcolony/initialize"
 	"testing"
+
+	"hopcolony.io/hopcolony/initialize"
 )
 
-func TestInitialize(t *testing.T) {
+func TestInitInitialize(t *testing.T) {
 	_, err := initialize.Initialize(initialize.ProjectConfig{ConfigFile: ".."})
 
 	if err != initialize.ConfigNotFound {
