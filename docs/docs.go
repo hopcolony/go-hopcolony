@@ -3,11 +3,9 @@ package docs
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"strconv"
 
 	"hopcolony.io/hopcolony/initialize"
 )
@@ -18,14 +16,14 @@ type ClusterHealth struct {
 	NumberOfNodes int    `json:"number_of_nodes"`
 }
 
-func New() (HopDoc, error) {
+func New() (*HopDoc, error) {
 	project := initialize.GetProject()
 	client, err := newHopDocClient(project, "docs.hopcolony.io", 443)
 	if err != nil {
-		return HopDoc{}, err
+		return nil, err
 	}
 
-	return HopDoc{project, client}, nil
+	return &HopDoc{project, client}, nil
 }
 
 type HopDoc struct {
@@ -38,13 +36,13 @@ func (h *HopDoc) Close() {
 }
 
 func (h *HopDoc) Status() (string, error) {
-	bytes, err := h.client.Get("/_cluster/health")
+	b, err := h.client.Get("/_cluster/health")
 	if err != nil {
 		return "", err
 	}
 
 	var clusterHealth ClusterHealth
-	err = json.Unmarshal(bytes, &clusterHealth)
+	err = json.Unmarshal(b, &clusterHealth)
 	if err != nil {
 		return "", err
 	}
@@ -53,15 +51,16 @@ func (h *HopDoc) Status() (string, error) {
 }
 
 func (h *HopDoc) Index(index string) *IndexReference {
-	return &IndexReference{h.client, index}
+	return &IndexReference{h.client, index, make([]Query, 0)}
 }
 
 func (h *HopDoc) Get() ([]Index, error) {
 	indices := make([]Index, 0)
 	resp, err := h.client.Get("/_cluster/health?level=indices")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not get cluster's health: %v", err)
 	}
+
 	var result map[string]interface{}
 	json.Unmarshal(resp, &result)
 	for name, status := range result["indices"].(map[string]interface{}) {
@@ -96,19 +95,19 @@ func (h *HopDocClient) Get(path string) ([]byte, error) {
 	req.Header.Add("Token", h.Project.Config.Token)
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not do GET request: %v", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("status code of GET is %s", resp.Status)
 	}
 
 	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusOK {
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return nil, err
-		}
-		return body, nil
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("could not read body in GET: %v", err)
 	}
-	return nil, errors.New("Status code for GET request was: " + strconv.Itoa(resp.StatusCode))
+	return body, nil
 }
 
 func (h *HopDocClient) Post(path string, body []byte) ([]byte, error) {
@@ -118,21 +117,23 @@ func (h *HopDocClient) Post(path string, body []byte) ([]byte, error) {
 	}
 	req.Header.Add("Token", h.Project.Config.Token)
 	req.Header.Add("Content-type", "application/json")
+
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not do POST request: %v", err)
+	}
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return nil, fmt.Errorf("status code of POST is %s", resp.Status)
 	}
 
 	defer resp.Body.Close()
-	respBody, err := ioutil.ReadAll(resp.Body)
+	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not read body in POST: %v", err)
 	}
 
-	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
-		return respBody, nil
-	}
-	return nil, fmt.Errorf("POST with error: %s", respBody)
+	return b, nil
 }
 
 func (h *HopDocClient) Put(path string, body []byte) ([]byte, error) {
@@ -142,21 +143,23 @@ func (h *HopDocClient) Put(path string, body []byte) ([]byte, error) {
 	}
 	req.Header.Add("Token", h.Project.Config.Token)
 	req.Header.Add("Content-type", "application/json")
+
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not do PUT request: %v", err)
+	}
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return nil, fmt.Errorf("status code of PUT is %s", resp.Status)
 	}
 
 	defer resp.Body.Close()
-	respBody, err := ioutil.ReadAll(resp.Body)
+	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not read body in PUT: %v", err)
 	}
 
-	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
-		return respBody, nil
-	}
-	return nil, fmt.Errorf("PUT with error: %s", respBody)
+	return b, nil
 }
 
 func (h *HopDocClient) Delete(path string) error {
@@ -166,21 +169,17 @@ func (h *HopDocClient) Delete(path string) error {
 	}
 	req.Header.Add("Token", h.Project.Config.Token)
 	req.Header.Add("Content-type", "application/json")
+
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("could not do DELETE request: %v", err)
 	}
 
-	defer resp.Body.Close()
-	respBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return err
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("status code of PUT is %s", resp.Status)
 	}
 
-	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
-		return nil
-	}
-	return fmt.Errorf("DELETE with error: %s", respBody)
+	return nil
 }
 
 func newHopDocClient(project initialize.Project, host string, port int) (HopDocClient, error) {

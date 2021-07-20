@@ -4,6 +4,7 @@ import (
 	"os"
 	"reflect"
 	"testing"
+	"time"
 
 	"hopcolony.io/hopcolony/docs"
 	"hopcolony.io/hopcolony/initialize"
@@ -15,7 +16,7 @@ type Data struct {
 
 var (
 	project initialize.Project
-	db      docs.HopDoc
+	db      *docs.HopDoc
 
 	index   string
 	uid     string
@@ -147,6 +148,77 @@ func TestDocsGetDocument(t *testing.T) {
 
 	var example Data
 	if err := snapshot.Doc.DataTo(&example); err != nil {
+		t.Errorf(`DataTo conversion not succeded for reason: %v`, err)
+	}
+
+	if !reflect.DeepEqual(example, data) {
+		t.Errorf(`Snapshot DataTo to be "%v" but got "%v"`, data, example)
+	}
+
+}
+
+func TestDocsQueryDocument(t *testing.T) {
+	// Wait for the document to be indexed
+	time.Sleep(1000 * time.Millisecond)
+
+	snapshot := db.Index(index).Where("purpose", "==", "not valid").Get()
+	if !snapshot.Success {
+		t.Errorf(`Query not succeded for reason: %s`, snapshot.Reason)
+	}
+
+	if len(snapshot.Docs) > 0 {
+		t.Errorf(`Invalid query has documents in the response: %s`, snapshot.Reason)
+	}
+
+	snapshot = db.Index(index).Where("purpose", "==", data.Purpose).Get()
+	if !snapshot.Success {
+		t.Errorf(`Query not succeded for reason: %s`, snapshot.Reason)
+	}
+
+	if len(snapshot.Docs) != 1 {
+		t.Errorf(`There should be 1 document in query, but got %d: %s`, len(snapshot.Docs), snapshot.Reason)
+	}
+
+	doc := snapshot.Docs[0]
+
+	if doc.Index != index {
+		t.Errorf(`Expected doc index to be "%s" but got "%s"`, index, doc.Index)
+	}
+	if doc.Id != uid {
+		t.Errorf(`Expected doc id to be "%s" but got "%s"`, uid, doc.Id)
+	}
+
+	var example Data
+	if err := doc.DataTo(&example); err != nil {
+		t.Errorf(`DataTo conversion not succeded for reason: %v`, err)
+	}
+
+	if !reflect.DeepEqual(example, data) {
+		t.Errorf(`Snapshot DataTo to be "%v" but got "%v"`, data, example)
+	}
+}
+
+func TestDocsGetIndex(t *testing.T) {
+	snapshot := db.Index(index).Get()
+	if !snapshot.Success {
+		t.Errorf(`Get on index not succeded for reason: %s`, snapshot.Reason)
+	}
+
+	if len(snapshot.Docs) != 1 {
+		t.Errorf(`There should be 1 document in query, but got %d: %s`, len(snapshot.Docs), snapshot.Reason)
+	}
+
+	doc := snapshot.Docs[0]
+
+	if doc.Index != index {
+		t.Errorf(`Expected doc index to be "%s" but got "%s"`, index, doc.Index)
+	}
+	if doc.Id != uid {
+		t.Errorf(`Expected doc id to be "%s" but got "%s"`, uid, doc.Id)
+	}
+
+	var example Data
+	if err := doc.DataTo(&example); err != nil {
 		t.Errorf(`DataTo conversion not succeded for reason: %v`, err)
 	}
 

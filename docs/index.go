@@ -8,7 +8,7 @@ import (
 type Index struct {
 	Name    string
 	NumDocs int
-	Status  string `json:"status"`
+	Status  string
 }
 
 type IndexSnapshot struct {
@@ -17,39 +17,71 @@ type IndexSnapshot struct {
 	Reason  string
 }
 
-type IndexReference struct {
-	client HopDocClient
-	Index  string
-}
-
-type BoolQuery struct {
-	Must   []interface{} `json:"must"`
-	Filter []interface{} `json:"filter"`
-}
 type Query struct {
-	Bool BoolQuery `json:"bool"`
-}
-type CompoundBody struct {
-	Size  int   `json:"size"`
-	From  int   `json:"from"`
-	Query Query `json:"query"`
+	Field    string
+	Operator string
+	Value    interface{}
 }
 
+type IndexReference struct {
+	client  HopDocClient
+	Index   string
+	Queries []Query
+}
+
+type CompoundBody struct {
+	Size  int `json:"size"`
+	From  int `json:"from"`
+	Query struct {
+		Bool struct {
+			Must   []map[string]interface{} `json:"must"`
+			Filter []map[string]interface{} `json:"filter"`
+		} `json:"bool"`
+	} `json:"query"`
+}
+
+func operatorToComparison(operator string) string {
+	switch operator {
+	case "<":
+		return "lt"
+	case "<=":
+		return "lte"
+	case ">":
+		return "gt"
+	default:
+		return "gte"
+	}
+}
 func (i *IndexReference) CompoundBody(size int, from int) CompoundBody {
 	var compoundBody CompoundBody
 	compoundBody.Size = size
 	compoundBody.From = from
-	compoundBody.Query.Bool.Must = make([]interface{}, 0)
-	compoundBody.Query.Bool.Filter = make([]interface{}, 0)
+	must := make([]map[string]interface{}, 0)
+	for _, q := range i.Queries {
+		query := make(map[string]interface{})
+		switch q.Operator {
+		case "==":
+			query["match"] = map[string]interface{}{
+				q.Field: q.Value,
+			}
+		case "<", "<=", ">", ">=":
+			query["range"] = map[string]interface{}{
+				q.Field: map[string]interface{}{
+					operatorToComparison(q.Operator): q.Value,
+				},
+			}
+		}
+		must = append(must, query)
+	}
+	compoundBody.Query.Bool.Must = must
+	compoundBody.Query.Bool.Filter = make([]map[string]interface{}, 0)
 	return compoundBody
 }
 
-type Hits struct {
-	Hits []Document `json:"hits"`
-}
-
 type IndexGetResponse struct {
-	Hits Hits `json:"hits"`
+	Hits struct {
+		Hits []Document
+	}
 }
 
 func (i *IndexReference) Get() *IndexSnapshot {
@@ -104,9 +136,15 @@ func (i *IndexReference) Document(id string) *DocumentReference {
 func (i *IndexReference) Count() (int, error) {
 	resp, err := i.client.Get(fmt.Sprintf("/%s/_count", i.Index))
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("could not get index count: %v", err)
 	}
+
 	var result map[string]interface{}
 	json.Unmarshal(resp, &result)
 	return int(result["count"].(float64)), nil
+}
+
+func (i *IndexReference) Where(field, operator string, value interface{}) *IndexReference {
+	i.Queries = append(i.Queries, Query{field, operator, value})
+	return i
 }

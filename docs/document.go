@@ -53,12 +53,12 @@ func (d *DocumentReference) Get() DocumentSnapshot {
 }
 
 func (d *DocumentReference) SetData(data interface{}) DocumentSnapshot {
-	jsonData, err := json.Marshal(data)
+	b, err := json.Marshal(data)
 	if err != nil {
 		return DocumentSnapshot{Success: false, Reason: err.Error()}
 	}
 
-	resp, err := d.client.Post(fmt.Sprintf("/%s/_doc/%s", d.Index, d.Id), jsonData)
+	resp, err := d.client.Post(fmt.Sprintf("/%s/_doc/%s", d.Index, d.Id), b)
 	if err != nil {
 		return DocumentSnapshot{Success: false, Reason: err.Error()}
 	}
@@ -70,7 +70,7 @@ func (d *DocumentReference) SetData(data interface{}) DocumentSnapshot {
 	}
 
 	var result map[string]interface{}
-	json.Unmarshal(jsonData, &result)
+	json.Unmarshal(b, &result)
 	document.Source = result
 
 	return DocumentSnapshot{&document, true, ""}
