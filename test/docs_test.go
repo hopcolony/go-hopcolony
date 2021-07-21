@@ -26,8 +26,8 @@ var (
 
 func TestDocsInitialize(t *testing.T) {
 	var err error
-	project, err = initialize.Initialize(initialize.ProjectConfig{Username: os.Getenv("HOP_USER_NAME"),
-		Project: os.Getenv("HOP_PROJECT_NAME"), Token: os.Getenv("HOP_TOKEN")})
+	project, err = initialize.Initialize(initialize.ProjectConfig{Username: os.Getenv("HOP_USERNAME"),
+		Project: os.Getenv("HOP_PROJECT"), Token: os.Getenv("HOP_TOKEN")})
 
 	if err != nil {
 		t.Errorf("Error in project creation: %s", err)
