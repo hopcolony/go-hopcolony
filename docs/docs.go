@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"regexp"
 
 	"hopcolony.io/hopcolony/initialize"
 )
@@ -63,7 +64,13 @@ func (h *HopDoc) Get() ([]Index, error) {
 
 	var result map[string]interface{}
 	json.Unmarshal(resp, &result)
+	dotr, _ := regexp.Compile(`\..*`)
+	ilmr, _ := regexp.Compile(`lm-history-.*`)
 	for name, status := range result["indices"].(map[string]interface{}) {
+		// Filter indices starting with . or ilm-history
+		if dotr.MatchString(name) || ilmr.MatchString(name) {
+			continue
+		}
 		index := Index{Name: name}
 		index.Status = status.(map[string]interface{})["status"].(string)
 		num_docs, err := h.Index(name).Count()
